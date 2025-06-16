@@ -1,0 +1,5 @@
+PyMYSQL
+python-dotenv
+mcp[cli]
+pydantic
+python-dateutil
