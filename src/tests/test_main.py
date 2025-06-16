@@ -78,6 +78,30 @@ class TestMain(TestCase):
         self.assertIn("Error: Invalid leave dates", result)
         self.assertEqual(history_size_before, history_size_after)
 
+    def test_apply_for_leave_invalid_employee_id_returns_failure(self):
+        """Tests that invalid date returns failure message."""
+        # invalid employee ID
+        invalid_emp_id = "0400"
+
+        current_date = datetime.now()
+        day_1 = (current_date + timedelta(days=2)).strftime("%Y-%m-%d")
+        day_2 = (current_date + timedelta(days=3)).strftime("%Y-%m-%d")
+
+        history_size_before = len(main.leave_histories)
+
+        leave_dates = [day_1, day_2]
+
+        result = main.apply_for_leave(
+            employee_id=invalid_emp_id,
+            leave_dates=leave_dates,
+            purpose=main.LeaveType.SICK.value,
+        )
+
+        history_size_after = len(main.leave_histories)
+
+        self.assertIn("not found", result.lower())
+        self.assertEqual(history_size_before, history_size_after)
+
 
 if __name__ == "__main__":
     unittest.main()

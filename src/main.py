@@ -110,7 +110,7 @@ def apply_for_leave(
     ]  # no-qa
 
     if len(matches) == 0:
-        return f"Not Found: No employee with ID '{employee_id}' found."
+        return f"Not Found: Employee with ID '{employee_id}' not found."
     else:
         idx, employee = matches[0]
         leave_count = len(leave_dates)
