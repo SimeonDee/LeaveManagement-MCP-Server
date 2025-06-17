@@ -232,16 +232,21 @@ def get_leave_histories(employee_id: str) -> str:
         ### Leave History
         [color blue] **Employee Name:** *{found_employee[0]["name"]} [/color]
         **Leave Balance:** *{found_employee[0]["balance"]}
-
-        ---
         """
     )
     formatted_histories = [
         format_leave_history(LeaveHistory(**history))
         for history in employee_histories  # no-qa
     ]
-    formatted_histories = "\n---\n".join(formatted_histories)
-    return f"{header}{formatted_histories}"
+    formatted_histories_md_str = "\n---\n".join(formatted_histories)
+    return dedent(
+        f"""
+            {header}
+
+            ---
+            {formatted_histories_md_str}
+        """
+    )
 
 
 if __name__ == "__main__":
