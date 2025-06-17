@@ -78,8 +78,8 @@ class TestMain(TestCase):
         self.assertIn("Error: Invalid leave dates", result)
         self.assertEqual(history_size_before, history_size_after)
 
-    def test_apply_for_leave_invalid_employee_id_returns_failure(self):
-        """Tests that invalid date returns failure message."""
+    def test_apply_for_leave_invalid_employee_id_returns_not_found(self):
+        """Tests that invalid employee_id returns failure message."""
         # invalid employee ID
         invalid_emp_id = "0400"
 
@@ -101,6 +101,77 @@ class TestMain(TestCase):
 
         self.assertIn("not found", result.lower())
         self.assertEqual(history_size_before, history_size_after)
+
+    def test_apply_for_leave_invalid_purpose_defaults_others(self):
+        """Tests that purpose out of context defaults to failure."""
+        other_purpose = "my personal reason"
+        current_date = datetime.now()
+        day_1 = (current_date + timedelta(days=2)).strftime("%Y-%m-%d")
+        day_2 = (current_date + timedelta(days=3)).strftime("%Y-%m-%d")
+        leave_dates = [day_1, day_2]
+
+        main.apply_for_leave(
+            employee_id="0001",
+            leave_dates=leave_dates,
+            purpose=other_purpose,
+        )
+        self.assertEqual(main.leave_histories[-1]["purpose"], "others")
+
+    def test_add_leave_to_history(self):
+        """Test leave can be added to history."""
+        mock_date = (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
+        mock_leave = {
+            "employee_id": "0001",
+            "purpose": "vacation",
+            "leave_date": mock_date,
+        }
+
+        size_before = len(main.leave_histories)
+        main.add_leave_to_history(**mock_leave)
+        size_after = len(main.leave_histories)
+
+        self.assertEqual(size_after, size_before + 1)
+
+    def test_add_leave_to_history_works_for_any_valid_date(self):
+        """Tests all valid leave date string is formated
+        and can be added to history."""
+        # mock_date = "20/06/2025, 10:30:25 AM"
+        mock_date = "January 26, 2030, 10:30:25 AM"
+        mock_leave = {
+            "employee_id": "0001",
+            "purpose": "vacation",
+            "leave_date": mock_date,
+        }
+
+        size_before = len(main.leave_histories)
+        main.add_leave_to_history(**mock_leave)
+        size_after = len(main.leave_histories)
+
+        self.assertEqual(size_after, size_before + 1)
+        self.assertEqual(main.leave_histories[-1]["leave_date"], "2030-01-26")
+
+    def test_cancel_leaves_valid_input(self):
+        """Tests that cancel_leaves works for valid input."""
+        current_date = datetime.now()
+        day_1 = (current_date + timedelta(days=2)).strftime("%Y-%m-%d")
+        day_2 = (current_date + timedelta(days=3)).strftime("%Y-%m-%d")
+        mock_emp_id = "0001"
+        mock_leave_dates = [day_1, day_2]
+
+        size_before = len(main.leave_histories)
+
+        # apply for leaves
+        main.apply_for_leave(
+            employee_id=mock_emp_id,
+            leave_dates=mock_leave_dates,
+            purpose="sick",
+        )
+        # cancel leaves
+        main.cancel_leaves(mock_emp_id, mock_leave_dates)
+
+        size_after = len(main.leave_histories)
+
+        self.assertEqual(size_after, size_before)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
-import asyncio
-from typing import List, Union
+# import asyncio
+from textwrap import dedent
+from typing import List
 from enum import StrEnum
 from pydantic import BaseModel
 from datetime import datetime
@@ -25,7 +26,7 @@ class Employee(BaseModel):
 class LeaveHistory(BaseModel):
     employee_id: str
     purpose: LeaveType
-    date: str
+    leave_date: str
 
 
 mcp = FastMCP("LeaveManager")
@@ -38,12 +39,50 @@ employees = [
 ]
 
 leave_histories = [
-    {"employee_id": "0001", "purpose": 1, "leave_date": "2025-06-01"},
-    {"employee_id": "0001", "purpose": 2, "leave_date": "2025-06-05"},
-    {"employee_id": "0001", "purpose": 1, "leave_date": "2025-06-10"},
-    {"employee_id": "0001", "purpose": 1, "leave_date": "2025-06-16"},
-    {"employee_id": "0002", "purpose": 5, "leave_date": "2025-06-12"},
+    {"employee_id": "0001", "purpose": "sick", "leave_date": "2025-06-01"},
+    {"employee_id": "0001", "purpose": "vacation", "leave_date": "2025-06-05"},
+    {"employee_id": "0001", "purpose": "sick", "leave_date": "2025-06-10"},
+    {"employee_id": "0001", "purpose": "sick", "leave_date": "2025-06-16"},
+    {"employee_id": "0002", "purpose": "others", "leave_date": "2025-06-12"},
 ]
+
+
+def format_date(leave_date: str):
+    try:
+        date_obj = parse(leave_date, fuzzy=False)
+        return date_obj.strftime("%Y-%m-%d")
+    except ValueError:
+        raise
+
+
+def is_valid_leave_date(leave_date_str: str) -> bool:
+    try:
+        # Confirm leave date is a valid date
+        leave_date_obj = parse(leave_date_str, fuzzy=False)
+        # validating leave_date is a future date
+        date_diff = (leave_date_obj - datetime.today()).days
+        return True if date_diff > 0 else False
+    except ValueError:
+        return False
+
+
+def add_leave_to_history(employee_id: str, purpose: str, leave_date: str):
+    leave_histories.append(
+        {
+            "employee_id": employee_id,
+            "purpose": purpose,
+            "leave_date": format_date(leave_date),
+        }
+    )  # no-qa
+
+
+def format_leave_history(history: LeaveHistory) -> str:
+    return dedent(
+        f"""
+        Date: {history.leave_date}
+        Purpose: {history.purpose.capitalize()}
+    """
+    )
 
 
 @mcp.tool()
@@ -120,8 +159,11 @@ def apply_for_leave(
                 f"You have only {employee["balance"]} leave days left."
             )
         else:
-            for leave_dt in leave_dates:
-                add_leave_to_history(employee["id"], purpose, leave_dt)
+            try:
+                for leave_dt in leave_dates:
+                    add_leave_to_history(employee["id"], purpose, leave_dt)
+            except ValueError as e:
+                return f"Error: {e}"
             new_balance = employee["balance"] - leave_count
             employees[idx]["balance"] = new_balance
 
@@ -131,26 +173,76 @@ def apply_for_leave(
             )
 
 
-def add_leave_to_history(employee_id: str, purpose: str, leave_date: str):
-    leave_histories.append(
-        {
-            "employee_id": employee_id,
-            "purpose": purpose,
-            "leave_date": leave_date,
-        }
-    )  # no-qa
+@mcp.tool()
+def cancel_leaves(employee_id: str, leave_dates: List[str]) -> str:
+    """Deletes or cancels a leave for an employee with given employee ID
+    for the specified leave_dates, if leave exists.
+
+    Args:
+        employee_id (str): The id of the employee e.g. "0001", "0043".
+        leave_dates (str): The dates of the leave to cancel e.g.
+            ["2025-10-19"], ["2025-10-19", "2025-10-20"].
+
+    Returns:
+        str: Success or failure message.
+    """
+    formatted_dates = [format_date(dt) for dt in leave_dates]
+    valid_dates = [is_valid_leave_date(dt) for dt in formatted_dates]
+    if False in valid_dates:
+        return (
+            "An invalid date is found "
+            f"{leave_dates[valid_dates.index(False)]}"
+            "Dates can only be a valid date and must be a future date."
+        )
+    found_histories = [
+        history
+        for history in leave_histories
+        if (
+            history["employee_id"] == employee_id.lower()
+            and history["leave_date"] in formatted_dates
+        )
+    ]  # no-qa
+    if len(found_histories) == 0:
+        return "No leave taken by the employee for the date(s) given."
+    for history in found_histories:
+        leave_histories.remove(history)
+    return 'Leaves approved for ""'
 
 
-def is_valid_leave_date(leave_date_str: Union[List[str], str]) -> bool:
-    try:
-        # Confirm leave date is a valid date
-        leave_date_obj = parse(leave_date_str, fuzzy=False)
-        # validating leave_date is a future date
-        date_diff = (leave_date_obj - datetime.today()).days
-        return True if date_diff > 0 else False
-    except ValueError:
-        return False
+@mcp.resource("leave://histories/{employee_id}")
+def get_leave_histories(employee_id: str) -> str:
+    """Get the leave history of an employee with the provided employee_id.
+
+    Args:
+        employee_id (str): The ID of the employee to retrieve leave history.
+
+    Returns:
+        str: The leave history of the employee in markdown format.
+    """
+    found_employee = [
+        employee for employee in employees if employee["id"] == employee_id
+    ]
+    employee_histories = [
+        history
+        for history in leave_histories
+        if history["employee_id"] == employee_id  # no-qa
+    ]
+    header = dedent(
+        f"""
+        ### Leave History
+        [color blue] **Employee Name:** *{found_employee[0]["name"]} [/color]
+        **Leave Balance:** *{found_employee[0]["balance"]}
+
+        ---
+        """
+    )
+    formatted_histories = [
+        format_leave_history(LeaveHistory(**history))
+        for history in employee_histories  # no-qa
+    ]
+    formatted_histories = "\n---\n".join(formatted_histories)
+    return f"{header}{formatted_histories}"
 
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    mcp.run(transport="sse", mount_path="/leavemanager")
